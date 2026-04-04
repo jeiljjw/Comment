@@ -24,7 +24,7 @@ export default function CommentGenerator({ selectedDate, comments, onSaveComment
   });
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
-  const progressRef = useRef<number | null>(null);
+  const completedRef = useRef(0);
 
   useEffect(() => {
     setKeyword('');
@@ -36,77 +36,90 @@ export default function CommentGenerator({ selectedDate, comments, onSaveComment
     localStorage.setItem('comment-generator-num-students', String(numStudents));
   }, [numStudents]);
 
+  const BATCH_SIZE = 3;
+
+  const generateBatch = async (count: number, totalBatches: number): Promise<string[]> => {
+    const prompt = `Generate ${count} unique Korean elementary student comments.
+    Keyword: ${keyword}, Weather: ${weather}, Event: ${specialEvent}.
+    Rules: Address individual student ("OO의..."), 1-2 sentences, encouraging, distinct.
+    NO plural terms ("여러분", "모두", "친구들").
+    Return JSON array of strings only.`;
+
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${API_KEY}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": window.location.origin,
+        "X-Title": "Teacher's Comment Craft",
+      },
+      body: JSON.stringify({
+        "model": "qwen/qwen3.6-plus:free",
+        "messages": [
+          {
+            "role": "user",
+            "content": prompt,
+          },
+        ],
+      }),
+    });
+
+    const result = await response.json();
+    if (!response.ok) {
+      console.error(`OpenRouter API error:`, result);
+      completedRef.current++;
+      setProgress(Math.round((completedRef.current / totalBatches) * 100));
+      return [];
+    }
+
+    const content = result.choices?.[0]?.message?.content;
+    if (content) {
+      const match = content.match(/\[[\s\S]*\]/);
+      if (match) {
+        try {
+          const parsed = JSON.parse(match[0]);
+          completedRef.current++;
+          setProgress(Math.round((completedRef.current / totalBatches) * 100));
+          return parsed;
+        } catch {
+          console.error(`Failed to parse comments JSON`);
+        }
+      }
+    }
+    completedRef.current++;
+    setProgress(Math.round((completedRef.current / totalBatches) * 100));
+    return [];
+  };
+
   const generateComments = async () => {
     setLoading(true);
     setProgress(0);
 
-    const estimatedTime = Math.max(3000, numStudents * 2000);
-    const interval = 50;
-    const step = (interval / estimatedTime) * 100;
+    const numBatches = Math.ceil(numStudents / BATCH_SIZE);
+    const batches: { count: number; index: number }[] = [];
 
-    progressRef.current = setInterval(() => {
-      setProgress(prev => {
-        const next = prev + step;
-        if (next >= 95) {
-          if (progressRef.current) clearInterval(progressRef.current);
-          return 95;
-        }
-        return next;
-      });
-    }, interval);
+    for (let i = 0; i < numBatches; i++) {
+      const remaining = numStudents - i * BATCH_SIZE;
+      batches.push({ count: Math.min(BATCH_SIZE, remaining), index: i });
+    }
 
-    const prompt = `Generate ${numStudents} unique, encouraging, and professional comments for individual elementary school students. 
-    Inputs: Keyword: ${keyword}, Weather: ${weather}, Special Event: ${specialEvent}.
-    IMPORTANT: Each comment must be addressed to an individual student (e.g., "OO의...or OO이의..."). 
-    NEVER use plural or group-addressed terms like "여러분", "모두", "친구들".
-    Each comment should be 1-2 sentences, personalized, and distinct from others. 
-    Return the comments as a JSON array of strings.`;
+    const batchPromises = batches.map(batch => generateBatch(batch.count, numBatches));
 
     try {
-      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${API_KEY}`,
-          "Content-Type": "application/json",
-          "HTTP-Referer": window.location.origin,
-          "X-Title": "Teacher's Comment Craft",
-        },
-        body: JSON.stringify({
-          "model": "qwen/qwen3.6-plus:free",
-          "messages": [
-            {
-              "role": "user",
-              "content": prompt,
-            },
-          ],
-        }),
-      });
+      const results = await Promise.all(batchPromises);
+      const allComments = results.flat();
 
-      const result = await response.json();
-      if (!response.ok) {
-        console.error("OpenRouter API error:", result);
-        return;
-      }
-      const content = result.choices?.[0]?.message?.content;
-      if (content) {
-        const match = content.match(/\[[\s\S]*\]/);
-        if (match) {
-          try {
-            const newComments = JSON.parse(match[0]);
-            onSaveComments(selectedDate, newComments);
-          } catch (parseError) {
-            console.error("Failed to parse comments JSON:", parseError);
-          }
-        }
+      if (allComments.length > 0) {
+        onSaveComments(selectedDate, allComments);
       }
     } catch (error) {
       console.error("Error generating comments:", error);
     } finally {
-      if (progressRef.current) clearInterval(progressRef.current);
       setProgress(100);
       setTimeout(() => {
         setLoading(false);
         setProgress(0);
+        completedRef.current = 0;
       }, 300);
     }
   };
@@ -151,7 +164,7 @@ export default function CommentGenerator({ selectedDate, comments, onSaveComment
               <input placeholder="키워드 (예: 노력, 성장)" value={keyword} onChange={(e) => setKeyword(e.target.value)} onFocus={(e) => e.target.select()} className="p-3 md:p-4 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-lg" />
               <input placeholder="날씨 (예: 맑음, 비)" value={weather} onChange={(e) => setWeather(e.target.value)} onFocus={(e) => e.target.select()} className="p-3 md:p-4 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-lg" />
               <input placeholder="특별한 일 (예: 운동회)" value={specialEvent} onChange={(e) => setSpecialEvent(e.target.value)} onFocus={(e) => e.target.select()} className="p-3 md:p-4 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-lg" />
-              <input type="number" placeholder="인원수" value={numStudents} onChange={(e) => setNumStudents(Math.max(1, parseInt(e.target.value) || 1))} onFocus={(e) => e.target.select()} className="p-3 md:p-4 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-lg" />
+              <input type="number" placeholder="인원수" max={30} value={numStudents} onChange={(e) => setNumStudents(Math.min(30, Math.max(1, parseInt(e.target.value) || 1)))} onFocus={(e) => e.target.select()} className="p-3 md:p-4 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-lg" />
             </div>
             <button 
               onClick={generateComments} 
