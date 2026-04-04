@@ -59,7 +59,7 @@ export default function App() {
         {sidebarOpen ? '✕' : '☰'}
       </button>
       
-      <div className={`${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 fixed md:relative z-40 transition-transform duration-300 h-full w-72`}>
+      <div className={`${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 fixed md:relative z-40 transition-transform duration-300 h-full w-80`}>
         <DateSidebar 
           selectedDate={selectedDate} 
           onDateChange={setSelectedDate} 
