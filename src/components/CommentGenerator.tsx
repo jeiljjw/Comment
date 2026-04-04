@@ -115,7 +115,7 @@ export default function CommentGenerator({ selectedDate, comments, onSaveComment
     <main className={`flex-1 p-4 md:p-10 bg-slate-100 bg-dot-pattern overflow-y-auto flex ${comments.length > 0 ? 'items-start' : 'items-center'} justify-center`}>
       <div className="max-w-3xl w-full bg-white p-6 md:p-10 rounded-2xl md:rounded-3xl shadow-xl border border-slate-200 text-lg">
         <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 md:mb-10">
-          <h1 className="text-3xl md:text-4xl font-extrabold text-slate-900 tracking-tight">{selectedDate} 코멘트</h1>
+          <h1 className="text-xl md:text-3xl font-extrabold text-slate-900 tracking-tight">{selectedDate} 코멘트</h1>
           {comments.length > 0 && (
             <button 
               onClick={() => onSaveComments(selectedDate, [])}
