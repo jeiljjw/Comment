@@ -1,128 +1,25 @@
-import { useState, useEffect, useRef } from 'react';
 import { Sparkles, CheckCircle2, Circle, Loader2 } from 'lucide-react';
-
-const API_KEY = import.meta.env.VITE_OPENROUTER_API_KEY || '';
+import { useCommentGenerator } from '../hooks/useCommentGenerator';
+import { Comment } from '../types';
+import { MAX_STUDENTS } from '../config';
 
 interface CommentGeneratorProps {
   selectedDate: string;
-  comments: { text: string, completed: boolean }[];
+  comments: Comment[];
   onSaveComments: (date: string, comments: string[]) => void;
   onToggleComment: (date: string, index: number) => void;
 }
 
 export default function CommentGenerator({ selectedDate, comments, onSaveComments, onToggleComment }: CommentGeneratorProps) {
-  const [keyword, setKeyword] = useState('');
-  const [weather, setWeather] = useState('');
-  const [specialEvent, setSpecialEvent] = useState('');
-  const [numStudents, setNumStudents] = useState(() => {
-    try {
-      const saved = localStorage.getItem('comment-generator-num-students');
-      return saved ? parseInt(saved) : 1;
-    } catch {
-      return 1;
-    }
-  });
-  const [loading, setLoading] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const completedRef = useRef(0);
-
-  useEffect(() => {
-    setKeyword('');
-    setWeather('');
-    setSpecialEvent('');
-  }, [selectedDate]);
-
-  useEffect(() => {
-    localStorage.setItem('comment-generator-num-students', String(numStudents));
-  }, [numStudents]);
-
-  const BATCH_SIZE = 3;
-
-  const generateBatch = async (count: number, totalBatches: number): Promise<string[]> => {
-    const prompt = `Generate ${count} unique Korean elementary student comments.
-    Keyword: ${keyword}, Weather: ${weather}, Event: ${specialEvent}.
-    Rules: Address individual student ("OO의..."), 1-2 sentences, encouraging, distinct.
-    NO plural terms ("여러분", "모두", "친구들").
-    Return JSON array of strings only.`;
-
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${API_KEY}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": window.location.origin,
-        "X-Title": "Teacher's Comment Craft",
-      },
-      body: JSON.stringify({
-        "model": "qwen/qwen3.6-plus:free",
-        "messages": [
-          {
-            "role": "user",
-            "content": prompt,
-          },
-        ],
-      }),
-    });
-
-    const result = await response.json();
-    if (!response.ok) {
-      console.error(`OpenRouter API error:`, result);
-      completedRef.current++;
-      setProgress(Math.round((completedRef.current / totalBatches) * 100));
-      return [];
-    }
-
-    const content = result.choices?.[0]?.message?.content;
-    if (content) {
-      const match = content.match(/\[[\s\S]*\]/);
-      if (match) {
-        try {
-          const parsed = JSON.parse(match[0]);
-          completedRef.current++;
-          setProgress(Math.round((completedRef.current / totalBatches) * 100));
-          return parsed;
-        } catch {
-          console.error(`Failed to parse comments JSON`);
-        }
-      }
-    }
-    completedRef.current++;
-    setProgress(Math.round((completedRef.current / totalBatches) * 100));
-    return [];
-  };
-
-  const generateComments = async () => {
-    setLoading(true);
-    setProgress(0);
-
-    const numBatches = Math.ceil(numStudents / BATCH_SIZE);
-    const batches: { count: number; index: number }[] = [];
-
-    for (let i = 0; i < numBatches; i++) {
-      const remaining = numStudents - i * BATCH_SIZE;
-      batches.push({ count: Math.min(BATCH_SIZE, remaining), index: i });
-    }
-
-    const batchPromises = batches.map(batch => generateBatch(batch.count, numBatches));
-
-    try {
-      const results = await Promise.all(batchPromises);
-      const allComments = results.flat();
-
-      if (allComments.length > 0) {
-        onSaveComments(selectedDate, allComments);
-      }
-    } catch (error) {
-      console.error("Error generating comments:", error);
-    } finally {
-      setProgress(100);
-      setTimeout(() => {
-        setLoading(false);
-        setProgress(0);
-        completedRef.current = 0;
-      }, 300);
-    }
-  };
+  const {
+    keyword, setKeyword,
+    weather, setWeather,
+    specialEvent, setSpecialEvent,
+    numStudents, setNumStudents,
+    loading, progress,
+    generateComments,
+    resetForm,
+  } = useCommentGenerator(selectedDate);
 
   return (
     <main className={`flex-1 p-4 md:p-10 bg-slate-100 bg-dot-pattern overflow-y-auto flex ${comments.length > 0 ? 'items-start' : 'items-center'} justify-center`}>
@@ -130,7 +27,7 @@ export default function CommentGenerator({ selectedDate, comments, onSaveComment
         <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 md:mb-10">
           <h1 className="text-xl md:text-3xl font-extrabold text-slate-900 tracking-tight">{selectedDate} 코멘트</h1>
           {comments.length > 0 && (
-            <button 
+            <button
               onClick={() => onSaveComments(selectedDate, [])}
               className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-600 rounded-full hover:bg-slate-200 transition font-medium text-lg"
             >
@@ -139,12 +36,12 @@ export default function CommentGenerator({ selectedDate, comments, onSaveComment
             </button>
           )}
         </header>
-        
+
         {comments.length > 0 ? (
           <div className="space-y-3 md:space-y-4">
             {comments.map((comment, index) => (
-              <div 
-                key={index} 
+              <div
+                key={index}
                 onClick={() => onToggleComment(selectedDate, index)}
                 className={`flex items-start gap-3 md:gap-4 p-4 md:p-6 rounded-xl md:rounded-2xl border transition cursor-pointer ${comment.completed ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-blue-100 shadow-sm hover:border-blue-200 hover:shadow-md hover:-translate-y-0.5'}`}
               >
@@ -164,10 +61,10 @@ export default function CommentGenerator({ selectedDate, comments, onSaveComment
               <input placeholder="키워드 (예: 노력, 성장)" value={keyword} onChange={(e) => setKeyword(e.target.value)} onFocus={(e) => e.target.select()} className="p-3 md:p-4 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-lg" />
               <input placeholder="날씨 (예: 맑음, 비)" value={weather} onChange={(e) => setWeather(e.target.value)} onFocus={(e) => e.target.select()} className="p-3 md:p-4 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-lg" />
               <input placeholder="특별한 일 (예: 운동회)" value={specialEvent} onChange={(e) => setSpecialEvent(e.target.value)} onFocus={(e) => e.target.select()} className="p-3 md:p-4 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-lg" />
-              <input type="number" placeholder="인원수" max={30} value={numStudents} onChange={(e) => setNumStudents(Math.min(30, Math.max(1, parseInt(e.target.value) || 1)))} onFocus={(e) => e.target.select()} className="p-3 md:p-4 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-lg" />
+              <input type="number" placeholder="인원수" max={MAX_STUDENTS} value={numStudents} onChange={(e) => setNumStudents(Math.min(MAX_STUDENTS, Math.max(1, parseInt(e.target.value) || 1)))} onFocus={(e) => e.target.select()} className="p-3 md:p-4 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-lg" />
             </div>
-            <button 
-              onClick={generateComments} 
+            <button
+              onClick={() => generateComments(selectedDate, onSaveComments)}
               disabled={loading}
               className="w-full bg-slate-900 text-white font-bold py-3 md:py-4 rounded-xl hover:bg-slate-800 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all disabled:bg-slate-400 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-none cursor-pointer text-base md:text-lg flex items-center justify-center gap-2"
             >
@@ -180,7 +77,7 @@ export default function CommentGenerator({ selectedDate, comments, onSaveComment
             </button>
             {loading && (
               <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
-                <div 
+                <div
                   className="h-full bg-blue-500 rounded-full transition-all duration-100 ease-linear"
                   style={{ width: `${progress}%` }}
                 />

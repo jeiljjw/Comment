@@ -8,6 +8,7 @@ import DateSidebar from './components/DateSidebar';
 import CommentGenerator from './components/CommentGenerator';
 
 const STORAGE_KEY = 'teachers-comment-craft';
+const MAX_DATES = 30;
 
 function loadFromStorage(): Record<string, {text: string, completed: boolean}[]> {
   try {
@@ -16,6 +17,16 @@ function loadFromStorage(): Record<string, {text: string, completed: boolean}[]>
   } catch {
     return {};
   }
+}
+
+function trimOldestDates(data: Record<string, {text: string, completed: boolean}[]>): Record<string, {text: string, completed: boolean}[]> {
+  const dates = Object.keys(data);
+  if (dates.length <= MAX_DATES) return data;
+  const sorted = dates.sort((a, b) => a.localeCompare(b));
+  const toRemove = sorted.slice(0, sorted.length - MAX_DATES);
+  const trimmed = { ...data };
+  toRemove.forEach(d => delete trimmed[d]);
+  return trimmed;
 }
 
 export default function App() {
@@ -28,7 +39,10 @@ export default function App() {
   }, [commentHistory]);
 
   const handleSaveComments = (date: string, comments: string[]) => {
-    setCommentHistory(prev => ({ ...prev, [date]: comments.map(text => ({ text, completed: false })) }));
+    setCommentHistory(prev => {
+      const next = { ...prev, [date]: comments.map(text => ({ text, completed: false })) };
+      return trimOldestDates(next);
+    });
   };
 
   const handleToggleComment = (date: string, index: number) => {
