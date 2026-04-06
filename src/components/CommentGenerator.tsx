@@ -2,7 +2,7 @@ import { Sparkles, Loader2, CheckCircle2, Sparkle, SquarePen } from 'lucide-reac
 import { useCommentGenerator } from '../hooks/useCommentGenerator';
 import { Comment } from '../types';
 import { MAX_STUDENTS } from '../config';
-import { getDayOfWeek } from '../utils/date';
+import { getDayOfWeek, parseDateString } from '../utils/date';
 
 interface CommentGeneratorProps {
   selectedDate: string;
@@ -21,12 +21,13 @@ export default function CommentGenerator({ selectedDate, comments, onSaveComment
     generateComments,
   } = useCommentGenerator(selectedDate);
 
-  const [year, month, day] = selectedDate.split('-');
-  const displayMonth = `${parseInt(month)}월`;
-  const displayDay = `${parseInt(day)}일`;
+  const { year, month, day } = parseDateString(selectedDate);
+  const displayMonth = `${parseInt(month, 10)}월`;
+  const displayDay = `${parseInt(day, 10)}일`;
   const dayOfWeek = getDayOfWeek(selectedDate);
 
   const hasComments = comments.length > 0;
+  const completedCount = comments.filter(c => c.completed).length;
 
   return (
     <div className={`h-full overflow-y-auto flex ${hasComments ? 'justify-center' : 'items-center justify-center'} bg-gradient-to-br from-ivory-50 via-warm-100 to-ivory-100 paper-texture bg-dot-pattern relative`}>
@@ -50,9 +51,9 @@ export default function CommentGenerator({ selectedDate, comments, onSaveComment
             <div className="flex items-center justify-between mb-3">
               <p className="text-sm text-warm-400">
                 총 <span className="font-semibold text-warm-600">{comments.length}</span>명의 코멘트
-                {comments.filter(c => c.completed).length > 0 && (
+                {completedCount > 0 && (
                   <span className="ml-2 text-sage-500">
-                    · <span className="font-semibold">{comments.filter(c => c.completed).length}</span>명 완료
+                    · <span className="font-semibold">{completedCount}</span>명 완료
                   </span>
                 )}
               </p>
@@ -69,30 +70,27 @@ export default function CommentGenerator({ selectedDate, comments, onSaveComment
 
         {hasComments ? (
           /* ===== Comment list ===== */
-          <div className="space-y-0 pb-20">
-
-            <div className="space-y-2 stagger-children">
-              {comments.map((comment, index) => (
-                <div
-                  key={comment.id}
-                  onClick={() => onToggleComment(selectedDate, comment.id)}
-                  className={`comment-card group flex items-start gap-4 md:gap-5 p-5 md:p-6 rounded-2xl cursor-pointer border ${comment.completed ? 'comment-completed border-sage-200' : 'bg-white/70 border-warm-200/50 hover:border-warm-200'}`}
-                >
-                  <div className="flex-shrink-0">
-                    {comment.completed ? (
-                      <CheckCircle2 className="shrink-0 mt-0.5" size={24} style={{ color: '#6BC06B' }} />
-                    ) : (
-                      <div className="number-badge">
-                        {index + 1}
-                      </div>
-                    )}
-                  </div>
-                  <p className={`flex-1 text-base md:text-lg leading-relaxed pt-0.5 ${comment.completed ? 'line-through text-warm-400' : 'text-warm-700'}`}>
-                    {comment.text}
-                  </p>
+          <div className="space-y-2 stagger-children pb-20">
+            {comments.map((comment, index) => (
+              <div
+                key={comment.id}
+                onClick={() => onToggleComment(selectedDate, comment.id)}
+                className={`comment-card group flex items-start gap-4 md:gap-5 p-5 md:p-6 rounded-2xl cursor-pointer border ${comment.completed ? 'comment-completed border-sage-200' : 'bg-white/70 border-warm-200/50 hover:border-warm-200'}`}
+              >
+                <div className="flex-shrink-0">
+                  {comment.completed ? (
+                    <CheckCircle2 className="shrink-0 mt-0.5" size={24} style={{ color: '#6BC06B' }} />
+                  ) : (
+                    <div className="number-badge">
+                      {index + 1}
+                    </div>
+                  )}
                 </div>
-              ))}
-            </div>
+                <p className={`flex-1 text-base md:text-lg leading-relaxed pt-0.5 ${comment.completed ? 'line-through text-warm-400' : 'text-warm-700'}`}>
+                  {comment.text}
+                </p>
+              </div>
+            ))}
           </div>
         ) : (
           /* ===== Form ===== */
@@ -112,53 +110,13 @@ export default function CommentGenerator({ selectedDate, comments, onSaveComment
             </div>
 
             <div className="glass-panel rounded-3xl p-6 md:p-8 shadow-sm">
-              {/* Input grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-                {/* Keyword */}
-                <div className="relative">
-                  <label className="block text-xs font-semibold text-warm-700 uppercase tracking-wider mb-2 ml-1">
-                    키워드
-                  </label>
-                  <input
-                    placeholder="노력, 성장, 배려..."
-                    value={keyword}
-                    onChange={(e) => setKeyword(e.target.value)}
-                    onFocus={(e) => e.target.select()}
-                    className="w-full px-4 py-3 rounded-xl outline-none text-base text-warm-700 placeholder-warm-300/60 stationery-input"
-                  />
-                </div>
-
-                {/* Weather */}
-                <div className="relative">
-                  <label className="block text-xs font-semibold text-warm-700 uppercase tracking-wider mb-2 ml-1">
-                    날씨
-                  </label>
-                  <input
-                    placeholder="맑음, 비, 추움..."
-                    value={weather}
-                    onChange={(e) => setWeather(e.target.value)}
-                    onFocus={(e) => e.target.select()}
-                    className="w-full px-4 py-3 rounded-xl outline-none text-base text-warm-700 placeholder-warm-300/60 stationery-input"
-                  />
-                </div>
-
-                {/* Special event */}
-                <div className="relative">
-                  <label className="block text-xs font-semibold text-warm-700 uppercase tracking-wider mb-2 ml-1">
-                    특별한 일
-                  </label>
-                  <input
-                    placeholder="운동회, 소풍, 발표..."
-                    value={specialEvent}
-                    onChange={(e) => setSpecialEvent(e.target.value)}
-                    onFocus={(e) => e.target.select()}
-                    className="w-full px-4 py-3 rounded-xl outline-none text-base text-warm-700 placeholder-warm-300/60 stationery-input"
-                  />
-                </div>
-
-                {/* Number of students */}
-                <div className="relative">
-                  <label className="block text-xs font-semibold text-warm-700 uppercase tracking-wider mb-2 ml-1">
+              {/* Input rows */}
+              <div className="space-y-3 mb-6">
+                <InputRow label="키워드" value={keyword} onChange={setKeyword} placeholder="노력, 성장, 배려..." />
+                <InputRow label="날씨" value={weather} onChange={setWeather} placeholder="맑음, 비, 추움..." />
+                <InputRow label="특별한 일" value={specialEvent} onChange={setSpecialEvent} placeholder="운동회, 소풍, 발표..." />
+                <div className="flex flex-row items-center gap-2">
+                  <label className="text-xs font-semibold text-warm-700 uppercase tracking-wider w-20 flex-shrink-0">
                     인원수
                   </label>
                   <input
@@ -166,9 +124,9 @@ export default function CommentGenerator({ selectedDate, comments, onSaveComment
                     max={MAX_STUDENTS}
                     min={1}
                     value={numStudents}
-                    onChange={(e) => setNumStudents(Math.min(MAX_STUDENTS, Math.max(1, parseInt(e.target.value) || 1)))}
+                    onChange={(e) => setNumStudents(Math.min(MAX_STUDENTS, Math.max(1, parseInt(e.target.value, 10) || 1)))}
                     onFocus={(e) => e.target.select()}
-                    className="w-full px-4 py-3 rounded-xl outline-none text-base text-warm-700 placeholder-warm-300/60 stationery-input"
+                    className="min-w-0 flex-1 px-3 py-2.5 rounded-xl outline-none text-base text-warm-700 placeholder-warm-300/60 stationery-input"
                   />
                 </div>
               </div>
@@ -219,6 +177,23 @@ export default function CommentGenerator({ selectedDate, comments, onSaveComment
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function InputRow({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder: string }) {
+  return (
+    <div className="flex flex-row items-center gap-2">
+      <label className="text-xs font-semibold text-warm-700 uppercase tracking-wider w-20 flex-shrink-0">
+        {label}
+      </label>
+      <input
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onFocus={(e) => e.target.select()}
+        className="min-w-0 flex-1 px-3 py-2.5 rounded-xl outline-none text-base text-warm-700 placeholder-warm-300/60 stationery-input"
+      />
     </div>
   );
 }

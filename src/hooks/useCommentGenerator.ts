@@ -14,6 +14,8 @@ import {
 } from '../config';
 
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY || '';
+const STORAGE_KEY_NUM_STUDENTS = 'comment-generator-num-students';
+const UNMOUNT_DELAY_MS = 300;
 
 function getAiClient(): GoogleGenAI | null {
   if (!API_KEY) return null;
@@ -32,7 +34,6 @@ interface UseCommentGeneratorReturn {
   loading: boolean;
   progress: number;
   generateComments: (selectedDate: string, onSaveComments: (date: string, comments: string[]) => void) => Promise<void>;
-  resetForm: () => void;
 }
 
 export function useCommentGenerator(selectedDate: string): UseCommentGeneratorReturn {
@@ -41,8 +42,8 @@ export function useCommentGenerator(selectedDate: string): UseCommentGeneratorRe
   const [specialEvent, setSpecialEvent] = useState('');
   const [numStudents, setNumStudents] = useState(() => {
     try {
-      const saved = localStorage.getItem('comment-generator-num-students');
-      return saved ? parseInt(saved) : DEFAULT_STUDENTS;
+      const saved = localStorage.getItem(STORAGE_KEY_NUM_STUDENTS);
+      return saved ? parseInt(saved, 10) : DEFAULT_STUDENTS;
     } catch {
       return DEFAULT_STUDENTS;
     }
@@ -50,6 +51,16 @@ export function useCommentGenerator(selectedDate: string): UseCommentGeneratorRe
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const mountedRef = useRef(false);
+  const abortTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (abortTimeoutRef.current) clearTimeout(abortTimeoutRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     setKeyword('');
@@ -58,7 +69,7 @@ export function useCommentGenerator(selectedDate: string): UseCommentGeneratorRe
   }, [selectedDate]);
 
   useEffect(() => {
-    localStorage.setItem('comment-generator-num-students', String(numStudents));
+    localStorage.setItem(STORAGE_KEY_NUM_STUDENTS, String(numStudents));
   }, [numStudents]);
 
   // Cleanup interval on unmount
@@ -68,6 +79,13 @@ export function useCommentGenerator(selectedDate: string): UseCommentGeneratorRe
         clearInterval(progressIntervalRef.current);
       }
     };
+  }, []);
+
+  const clearProgressInterval = useCallback(() => {
+    if (progressIntervalRef.current) {
+      clearInterval(progressIntervalRef.current);
+      progressIntervalRef.current = null;
+    }
   }, []);
 
   const generateBatch = useCallback(async (
@@ -132,7 +150,7 @@ export function useCommentGenerator(selectedDate: string): UseCommentGeneratorRe
     }
 
     const allComments: string[] = [];
-    if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+    clearProgressInterval();
     progressIntervalRef.current = setInterval(() => {
       setProgress(prev => Math.min(prev + PROGRESS_INCREMENT, PROGRESS_CAP));
     }, PROGRESS_INTERVAL_MS);
@@ -147,28 +165,24 @@ export function useCommentGenerator(selectedDate: string): UseCommentGeneratorRe
         }
       }
 
-      if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+      clearProgressInterval();
       setProgress(100);
 
       if (allComments.length > 0) {
         onSaveComments(selectedDate, allComments);
       }
     } catch (error) {
-      if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+      clearProgressInterval();
       console.error('Error generating comments:', error);
     } finally {
-      setTimeout(() => {
+      if (abortTimeoutRef.current) clearTimeout(abortTimeoutRef.current);
+      abortTimeoutRef.current = setTimeout(() => {
+        if (!mountedRef.current) return;
         setLoading(false);
         setProgress(0);
-      }, 300);
+      }, UNMOUNT_DELAY_MS);
     }
-  }, [numStudents, keyword, weather, specialEvent, generateBatch]);
-
-  const resetForm = useCallback(() => {
-    setKeyword('');
-    setWeather('');
-    setSpecialEvent('');
-  }, []);
+  }, [numStudents, keyword, weather, specialEvent, generateBatch, clearProgressInterval]);
 
   return {
     keyword, setKeyword,
@@ -177,6 +191,5 @@ export function useCommentGenerator(selectedDate: string): UseCommentGeneratorRe
     numStudents, setNumStudents,
     loading, progress,
     generateComments,
-    resetForm,
   };
 }

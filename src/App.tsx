@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Menu } from 'lucide-react';
 import DateSidebar from './components/DateSidebar';
 import CommentGenerator from './components/CommentGenerator';
@@ -8,7 +8,7 @@ import { getTodayDateString } from './utils/date';
 const STORAGE_KEY = 'teachers-comment-craft';
 const MAX_DATES = 30;
 
-function migrateCommentIds(data: CommentHistory): CommentHistory {
+function migrateCommentIds(data: CommentHistory): { migrated: CommentHistory; needsSave: boolean } {
   const migrated: CommentHistory = {};
   let needsSave = false;
 
@@ -22,17 +22,19 @@ function migrateCommentIds(data: CommentHistory): CommentHistory {
     });
   }
 
-  if (needsSave) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
-  }
-
-  return migrated;
+  return { migrated, needsSave };
 }
 
 function loadFromStorage(): CommentHistory {
   try {
     const data = localStorage.getItem(STORAGE_KEY);
-    return data ? migrateCommentIds(JSON.parse(data)) : {};
+    if (!data) return {};
+    const parsed: CommentHistory = JSON.parse(data);
+    const { migrated, needsSave } = migrateCommentIds(parsed);
+    if (needsSave) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+    }
+    return migrated;
   } catch {
     return {};
   }
@@ -49,7 +51,7 @@ function trimOldestDates(data: CommentHistory): CommentHistory {
 }
 
 function createComments(texts: string[]): Comment[] {
-  return texts.map((text, index) => ({
+  return texts.map((text) => ({
     id: crypto.randomUUID(),
     text,
     completed: false,
@@ -65,14 +67,14 @@ export default function App() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(commentHistory));
   }, [commentHistory]);
 
-  const handleSaveComments = (date: string, comments: string[]) => {
+  const handleSaveComments = useCallback((date: string, comments: string[]) => {
     setCommentHistory(prev => {
       const next = { ...prev, [date]: createComments(comments) };
       return trimOldestDates(next);
     });
-  };
+  }, []);
 
-  const handleToggleComment = (date: string, commentId: string) => {
+  const handleToggleComment = useCallback((date: string, commentId: string) => {
     setCommentHistory(prev => {
       const dateComments = [...(prev[date] || [])];
       const index = dateComments.findIndex(c => c.id === commentId);
@@ -80,9 +82,9 @@ export default function App() {
       dateComments[index] = { ...dateComments[index], completed: !dateComments[index].completed };
       return { ...prev, [date]: dateComments };
     });
-  };
+  }, []);
 
-  const handleDeleteComments = (date: string) => {
+  const handleDeleteComments = useCallback((date: string) => {
     setCommentHistory(prev => {
       const next = { ...prev };
       delete next[date];
@@ -91,7 +93,14 @@ export default function App() {
     if (selectedDate === date) {
       setSelectedDate(getTodayDateString());
     }
-  };
+  }, [selectedDate]);
+
+  const handleDateChange = useCallback((date: string) => {
+    setSelectedDate(date);
+    setSidebarOpen(false);
+  }, []);
+
+  const dates = useMemo(() => Object.keys(commentHistory), [commentHistory]);
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -116,8 +125,8 @@ export default function App() {
       <div className={`${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 fixed md:relative z-40 transition-transform duration-300 ease-in-out`}>
         <DateSidebar
           selectedDate={selectedDate}
-          onDateChange={(d) => { setSelectedDate(d); setSidebarOpen(false); }}
-          dates={Object.keys(commentHistory)}
+          onDateChange={handleDateChange}
+          dates={dates}
           onDeleteDate={handleDeleteComments}
         />
       </div>

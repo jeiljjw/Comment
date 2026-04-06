@@ -7,10 +7,3 @@ export interface Comment {
 export interface CommentHistory {
   [date: string]: Comment[];
 }
-
-export interface CommentGeneratorOptions {
-  keyword: string;
-  weather: string;
-  specialEvent: string;
-  numStudents: number;
-}
