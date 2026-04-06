@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { GoogleGenAI } from '@google/genai';
 import {
   BATCH_SIZE,
@@ -14,7 +14,11 @@ import {
 } from '../config';
 
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY || '';
-const ai = new GoogleGenAI({ apiKey: API_KEY });
+
+function getAiClient(): GoogleGenAI | null {
+  if (!API_KEY) return null;
+  return new GoogleGenAI({ apiKey: API_KEY });
+}
 
 interface UseCommentGeneratorReturn {
   keyword: string;
@@ -45,6 +49,7 @@ export function useCommentGenerator(selectedDate: string): UseCommentGeneratorRe
   });
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     setKeyword('');
@@ -56,13 +61,27 @@ export function useCommentGenerator(selectedDate: string): UseCommentGeneratorRe
     localStorage.setItem('comment-generator-num-students', String(numStudents));
   }, [numStudents]);
 
+  // Cleanup interval on unmount
+  useEffect(() => {
+    return () => {
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+      }
+    };
+  }, []);
+
   const generateBatch = useCallback(async (
     count: number,
-    totalBatches: number,
     keyword: string,
     weather: string,
     specialEvent: string,
   ): Promise<string[]> => {
+    const ai = getAiClient();
+    if (!ai) {
+      console.error('Gemini API key is not configured');
+      return [];
+    }
+
     const prompt = buildPrompt({ count, keyword, weather, specialEvent });
 
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
@@ -113,13 +132,14 @@ export function useCommentGenerator(selectedDate: string): UseCommentGeneratorRe
     }
 
     const allComments: string[] = [];
-    const smoothInterval = setInterval(() => {
+    if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+    progressIntervalRef.current = setInterval(() => {
       setProgress(prev => Math.min(prev + PROGRESS_INCREMENT, PROGRESS_CAP));
     }, PROGRESS_INTERVAL_MS);
 
     try {
       for (let i = 0; i < batches.length; i++) {
-        const result = await generateBatch(batches[i], numBatches, keyword, weather, specialEvent);
+        const result = await generateBatch(batches[i], keyword, weather, specialEvent);
         allComments.push(...result);
 
         if (i < batches.length - 1) {
@@ -127,14 +147,14 @@ export function useCommentGenerator(selectedDate: string): UseCommentGeneratorRe
         }
       }
 
-      clearInterval(smoothInterval);
+      if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
       setProgress(100);
 
       if (allComments.length > 0) {
         onSaveComments(selectedDate, allComments);
       }
     } catch (error) {
-      clearInterval(smoothInterval);
+      if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
       console.error('Error generating comments:', error);
     } finally {
       setTimeout(() => {

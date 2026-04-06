@@ -105,5 +105,14 @@ export default defineConfig(({mode}) => {
     server: {
       hmr: process.env.DISABLE_HMR !== 'true' ? { protocol: 'ws' } : false,
     },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'google-ai': ['@google/genai'],
+          },
+        },
+      },
+    },
   };
 });
