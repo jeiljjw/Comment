@@ -1,6 +1,6 @@
 import { Trash2, ChevronLeft, ChevronRight, BookOpen, ChevronDown, CalendarDays } from 'lucide-react';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { getDayOfWeek, formatDateLabel, toPaddedDateString, buildDateString, getTodayDateString } from '../utils/date';
+import { getDayOfWeek, formatDateLabel, toPaddedDateString, buildDateString, getTodayDateString, getYesterdayDateString } from '../utils/date';
 
 interface DateSidebarProps {
   selectedDate: string;
@@ -25,6 +25,7 @@ export default function DateSidebar({ selectedDate, onDateChange, dates, onDelet
   const calendarRef = useRef<HTMLDivElement>(null);
 
   const today = getTodayDateString();
+  const yesterday = getYesterdayDateString();
 
   // Sync calendar state when selectedDate changes externally
   useEffect(() => {
@@ -185,7 +186,13 @@ export default function DateSidebar({ selectedDate, onDateChange, dates, onDelet
               {sortedDates.map((date) => {
                 const isActive = date === selectedDate;
                 const isToday = date === today;
+                const isYesterday = date === yesterday;
                 const { month, day, dayOfWeek } = formatDateLabel(date);
+
+                let dateLabel: string;
+                if (isToday) dateLabel = '오늘';
+                else if (isYesterday) dateLabel = '어제';
+                else dateLabel = `${month} ${day}`;
 
                 return (
                   <div
@@ -195,17 +202,19 @@ export default function DateSidebar({ selectedDate, onDateChange, dates, onDelet
                   >
                     {/* Calendar-style date badge */}
                     <div className={`w-11 h-11 rounded-xl flex flex-col items-center justify-center flex-shrink-0 transition-all ${isActive ? 'bg-gradient-to-br from-coral-400/90 to-amber-200/80 text-white shadow-sm' : 'bg-white/70 text-warm-600 border border-warm-200/50 group-hover:bg-white group-hover:border-warm-300/60'}`}>
-                      <span className="text-sm font-medium leading-none opacity-70">{month.replace('월', '')}</span>
-                      <span className="text-base font-bold leading-tight">{parseInt(day, 10)}</span>
+                      {(isToday || isYesterday) ? (
+                        <span className="text-xl font-bold leading-tight">{day.replace('일', '')}</span>
+                      ) : (
+                        <>
+                          <span className="text-sm font-medium leading-none opacity-70">{month.replace('월', '')}</span>
+                          <span className="text-base font-bold leading-tight">{parseInt(day, 10)}</span>
+                        </>
+                      )}
                     </div>
 
                     {/* Date info */}
                     <div className="flex-1 min-w-0">
-                      {isToday ? (
-                        <span className="text-base font-semibold text-warm-700">오늘</span>
-                      ) : (
-                        <span className="text-base font-medium text-warm-700">{month} {day}</span>
-                      )}
+                      <span className="text-base font-semibold text-warm-700">{dateLabel}</span>
                       <div className="flex items-center gap-1.5">
                         <span className={`text-sm font-semibold ${isActive ? 'text-coral-500' : 'text-sage-500'}`}>{dayOfWeek}</span>
                         <span className="text-sm text-warm-300">·</span>
